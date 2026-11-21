@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>中心机房指挥中心</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:rgba(12,18,26,.82);
+    --line:rgba(120,190,255,.18);
+    --txt:#e8f1fa;
+    --sub:#8fa6bb;
+    --cyan:#3fd0ff;
+    --amber:#ffb547;
+    --red:#ff5a5a;
+    --green:#37d67a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
+    font-family:"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif;-webkit-font-smoothing:antialiased}
+  #app{position:fixed;inset:0}
+  canvas{display:block}
+
+  /* ---------- 顶部 ---------- */
+  #topbar{position:fixed;left:0;right:0;top:0;height:64px;display:flex;align-items:center;
+    justify-content:space-between;padding:0 22px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(4,8,12,.78),rgba(4,8,12,0));z-index:10}
+  .brand{display:flex;align-items:center;gap:12px;pointer-events:auto}
+  .logo{width:30px;height:30px;border:1px solid var(--cyan);border-radius:6px;position:relative;
+    box-shadow:0 0 14px rgba(63,208,255,.35) inset}
+  .logo::before{content:"";position:absolute;inset:6px;border:1px solid rgba(63,208,255,.65);
+    border-radius:2px;transform:rotate(45deg)}
+  .brand h1{font-size:15px;font-weight:600;letter-spacing:.5px}
+  .brand p{font-size:11px;color:var(--sub);letter-spacing:1.5px;margin-top:2px}
+  .top-right{display:flex;align-items:center;gap:14px;pointer-events:auto}
+  #clock{font-family:Consolas,monospace;font-size:15px;color:#cfe6f7;letter-spacing:1px}
+  .divider{width:1px;height:22px;background:var(--line)}
+  .btn{cursor:pointer;border:1px solid var(--line);background:rgba(20,32,44,.7);color:#cfe0ee;
+    height:32px;padding:0 14px;border-radius:5px;font-size:12px;letter-spacing:.5px;
+    transition:.2s;backdrop-filter:blur(8px)}
+  .btn:hover{border-color:rgba(63,208,255,.55);color:#fff;box-shadow:0 0 12px rgba(63,208,255,.18)}
+  .btn.active{border-color:var(--amber);color:var(--amber);background:rgba(60,36,10,.55)}
+  .btn.guide{border-color:rgba(255,181,71,.42);color:#ffd79a;background:rgba(52,34,10,.5)}
+  .btn.guide:hover{border-color:var(--amber);box-shadow:0 0 12px rgba(255,181,71,.25)}
+
+  /* ---------- 左侧指标 ---------- */
+  #cards{position:fixed;left:20px;top:84px;width:242px;display:flex;flex-direction:column;gap:10px;z-index:9}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;
+    backdrop-filter:blur(10px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  .card h3{font-size:11px;color:var(--sub);font-weight:500;letter-spacing:1.2px;
+    display:flex;justify-content:space-between;align-items:center}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+  .dot.warn{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+  .dot.bad{background:var(--red);box-shadow:0 0 8px var(--red)}
+  .kv{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;font-size:12px;color:#a9bed0}
+  .kv b{font-size:17px;color:#fff;font-weight:600;font-family:Consolas,monospace}
+  .kv b small{font-size:11px;color:var(--sub);font-weight:400;margin-left:3px}
+  .bar{height:3px;border-radius:2px;background:rgba(255,255,255,.08);margin-top:10px;overflow:hidden}
+  .bar i{display:block;height:100%;width:40%;background:linear-gradient(90deg,#2a9fd6,var(--cyan));
+    box-shadow:0 0 10px rgba(63,208,255,.5);transition:width .8s ease}
+
+  /* ---------- 视角按钮 ---------- */
+  #views{position:fixed;right:20px;bottom:22px;display:flex;gap:8px;z-index:9}
+  #views .btn{min-width:74px}
+  #hint{position:fixed;left:20px;bottom:22px;font-size:11px;color:#6d8397;letter-spacing:.6px;z-index:9}
+  #hint span{color:#9db6ca}
+
+  /* ---------- 右侧详情 ---------- */
+  #panel{position:fixed;right:20px;top:84px;width:322px;max-height:calc(100% - 170px);
+    background:var(--panel);border:1px solid var(--line);border-left:2px solid var(--cyan);
+    border-radius:8px;backdrop-filter:blur(12px);z-index:11;overflow:auto;
+    transform:translateX(360px);opacity:0;transition:.32s cubic-bezier(.2,.8,.2,1)}
+  #panel.open{transform:none;opacity:1}
+  #panel .ph{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;
+    padding:14px 16px;background:rgba(10,16,23,.96);border-bottom:1px solid var(--line)}
+  #panel .ph h2{font-size:14px;font-weight:600;letter-spacing:.5px}
+  #panel .ph button{background:none;border:0;color:var(--sub);font-size:18px;cursor:pointer;line-height:1}
+  #panel .pb{padding:14px 16px 20px}
+  .p-tag{display:inline-block;font-size:10px;padding:2px 7px;border:1px solid rgba(63,208,255,.35);
+    color:var(--cyan);border-radius:3px;margin-bottom:10px;letter-spacing:1px}
+  .p-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(140,170,195,.14);
+    font-size:12px;color:#9fb4c6}
+  .p-row b{color:#e9f4ff;font-weight:500;font-family:Consolas,monospace}
+  .p-row b.ok{color:var(--green)}
+  .p-row b.warn{color:var(--amber)}
+  .p-row b.bad{color:var(--red)}
+  .p-note{margin-top:12px;font-size:11.5px;line-height:1.8;color:#8ba2b6}
+  .p-actions{display:flex;gap:8px;margin-top:16px}
+  .p-actions .btn{flex:1;font-size:12px}
+
+  /* ---------- 告警条 ---------- */
+  #banner{position:fixed;left:50%;top:78px;transform:translate(-50%,-16px);z-index:12;
+    background:rgba(64,12,12,.9);border:1px solid rgba(255,90,90,.55);border-radius:6px;
+    color:#ffd7d7;font-size:12.5px;letter-spacing:.6px;padding:9px 18px;opacity:0;
+    pointer-events:none;transition:.3s;box-shadow:0 0 26px rgba(255,60,60,.25)}
+  #banner.show{opacity:1;transform:translate(-50%,0)}
+  #banner b{color:#fff}
+
+  /* ---------- 悬停提示 ---------- */
+  #tip{position:fixed;padding:5px 9px;background:rgba(8,14,20,.9);border:1px solid var(--line);
+    border-radius:4px;font-size:11px;color:#cfe4f5;pointer-events:none;opacity:0;z-index:13;
+    transform:translate(12px,12px);transition:opacity .15s;white-space:nowrap}
+
+  /* ---------- 降级 ---------- */
+  #fallback{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;background:#0b0f14;z-index:50;text-align:center;padding:30px}
+  #fallback h2{font-size:18px;color:#fff}
+  #fallback p{font-size:12.5px;color:var(--sub);line-height:1.9;max-width:520px}
+  #fallback .mini{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;width:min(620px,90vw)}
+  #fallback .mini div{border:1px solid var(--line);border-radius:6px;padding:12px;font-size:12px;color:#9db6ca}
+
+  ::-webkit-scrollbar{width:6px}
+  ::-webkit-scrollbar-thumb{background:rgba(120,160,190,.35);border-radius:3px}
+  @media (max-width:1100px){#cards{display:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="topbar">
+  <div class="brand">
+    <div class="logo"></div>
+    <div>
+      <h1>中心机房指挥中心</h1>
+      <p>NETWORK &amp; BROADCAST SECURITY OPERATION CENTER</p>
+    </div>
+  </div>
+  <div class="top-right">
+    <span id="clock">--:--:--</span>
+    <span class="divider"></span>
+    <button class="btn" id="walk-btn">自由行走</button>
+    <button class="btn" id="alarm-btn">告警演练</button>
+    <button class="btn" id="reset-btn">复位</button>
+  </div>
+</div>
+
+<div id="cards">
+  <div class="card">
+    <h3><span>安全播出</span><i class="dot" id="dot-bc"></i></h3>
+    <div class="kv"><span>信源正常</span><b id="m-src">12<small>/12</small></b></div>
+    <div class="kv"><span>末端在线</span><b id="m-out">386<small>/386</small></b></div>
+    <div class="bar"><i id="bar-bc" style="width:96%"></i></div>
+  </div>
+  <div class="card">
+    <h3><span>网络安全</span><i class="dot warn" id="dot-sec"></i></h3>
+    <div class="kv"><span>今日攻击</span><b id="m-atk">1284</b></div>
+    <div class="kv"><span>自动封禁</span><b id="m-blk">37</b></div>
+    <div class="kv"><span>待处置</span><b id="m-pend">2</b></div>
+  </div>
+  <div class="card">
+    <h3><span>网络性能</span><i class="dot" id="dot-net"></i></h3>
+    <div class="kv"><span>出口流量</span><b id="m-traf">42.6<small>Gbps</small></b></div>
+    <div class="kv"><span>时延 / 丢包</span><b>3.1<small>ms</small> / <span id="m-loss">0.02%</span></b></div>
+    <div class="bar"><i id="bar-net" style="width:43%"></i></div>
+  </div>
+</div>
+
+<div id="views">
+  <button class="btn" data-view="0">1 全景</button>
+  <button class="btn" data-view="1">2 大屏</button>
+  <button class="btn" data-view="2">3 业务屏</button>
+  <button class="btn" data-view="3">4 主控台</button>
+  <button class="btn" data-view="4">5 俯视</button>
+  <button class="btn guide" data-view="5">6 回望玻璃门</button>
+</div>
+
+<div id="hint">拖拽旋转 · 滚轮缩放 · 右键平移 · <span>点击地面进入第一人称行走（F 切换）</span></div>
+
+<div id="panel">
+  <div class="ph"><h2 id="panel-title">详情</h2><button id="panel-close">×</button></div>
+  <div class="pb" id="panel-body"></div>
+</div>
+
+<div id="banner"><b>一级响应</b> · 数字电视平台主信源异常，已自动切换备用信源，请值班员确认</div>
+<div id="tip"></div>
+
+<div id="fallback">
+  <h2>3D 渲染不可用，已切换至 2D 值守看板</h2>
+  <p>当前终端未启用 WebGL 或显卡性能不足。指挥中心应保留 2D 降级页面，保证大屏在任何情况下都能显示关键指标。</p>
+  <div class="mini">
+    <div>安全播出<br /><b style="color:#37d67a">信源 12/12 · 末端 386/386</b></div>
+    <div>网络安全<br /><b style="color:#ffb547">待处置 2 · 已封禁 37</b></div>
+    <div>网络性能<br /><b style="color:#3fd0ff">42.6 Gbps · 3.1 ms</b></div>
+  </div>
+</div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
