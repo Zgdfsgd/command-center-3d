@@ -1,0 +1,5 @@
+# 本地截图 / 调试产物，不随仓库部署
+shot.png
+*.log
+.DS_Store
+Thumbs.db

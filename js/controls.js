@@ -10,6 +10,8 @@ export class Orbit {
     this.r = 10.5;
     this.theta = 0;
     this.phi = 1.32;
+    /* 轨道可活动范围（大厅 / 健身房各一套），为空时用大厅默认值 */
+    this.bounds = null;
 
     this._drag = null;
     this._px = 0; this._py = 0;
@@ -58,14 +60,29 @@ export class Orbit {
   wheel(e) {
     if (!this.enabled) return;
     e.preventDefault();
-    this.r = THREE.MathUtils.clamp(this.r * (1 + Math.sign(e.deltaY) * 0.09), 2.2, 17);
+    const maxR = this.bounds?.maxR ?? 17;
+    this.r = THREE.MathUtils.clamp(this.r * (1 + Math.sign(e.deltaY) * 0.09), 2.2, maxR);
     this.apply();
   }
 
   clampTarget() {
-    this.target.x = THREE.MathUtils.clamp(this.target.x, -7.5, 7.5);
-    this.target.y = THREE.MathUtils.clamp(this.target.y, 0.4, 3.0);
-    this.target.z = THREE.MathUtils.clamp(this.target.z, -5.2, 5.0);
+    const b = this.bounds;
+    this.target.x = THREE.MathUtils.clamp(this.target.x, b ? b.x0 : -7.5, b ? b.x1 : 7.5);
+    this.target.y = THREE.MathUtils.clamp(this.target.y, b ? b.y0 : 0.4, b ? b.y1 : 3.0);
+    this.target.z = THREE.MathUtils.clamp(this.target.z, b ? b.z0 : -5.2, b ? b.z1 : 5.0);
+  }
+
+  /* 以相机当前位姿反推环绕参数：退出第一人称时镜头原地不动，不跳回大厅 */
+  syncToCamera(target) {
+    this.target.copy(target);
+    this.clampTarget();
+    const d = new THREE.Vector3().subVectors(this.camera.position, this.target);
+    const r = Math.max(1.2, d.length());
+    this.r = r;
+    this.theta = Math.atan2(d.x, d.z);
+    this.phi = Math.acos(THREE.MathUtils.clamp(d.y / r, -0.98, 0.98));
+    this._fly = null;
+    this.apply();
   }
 
   apply() {

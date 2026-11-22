@@ -1,12 +1,6 @@
-/* 界面层：指标模拟、详情面板、告警演练、时钟 */
+/* 界面层：指标渲染、详情面板、告警演练、时钟 */
 
-const D = {
-  src: 12, srcTotal: 12,
-  out: 386, outTotal: 386,
-  attacks: 1284, blocked: 37, pending: 2,
-  traffic: 42.6, loss: 0.02,
-  alarm: false
-};
+import { metrics, subscribe, update } from './store.js';
 
 const PANELS = {
   wall: {
@@ -83,12 +77,126 @@ const PANELS = {
       ['回滚窗口', '30 分钟']
     ],
     note: '演示环境：处置按钮不接生产系统。真实落地时建议跳转现有工单/堡垒机，保留完整审计。'
+  },
+  secwall: {
+    tag: 'SECURITY WALL',
+    title: '网络安全攻击态势 · 实时大屏',
+    rows: [
+      ['当前攻击速率', '386 次 / 分钟', 'warn'],
+      ['攻击来源 TOP1', '198.51.100.0/24（境外）'],
+      ['主要类型', '端口扫描 42% · 暴力破解 27% · Web 探测 18%'],
+      ['DDoS 峰值', '3.2 Gbps', 'warn'],
+      ['今日封禁', '37 个 IP', 'ok'],
+      ['待处置事件', '2 起 · 已派单', 'warn'],
+      ['联动链路', '态势感知 → 防火墙 → 工单 → 企业微信'],
+      ['大屏刷新', '10 fps 节流 · 仅重绘变化区域']
+    ],
+    note: '大屏只做态势呈现与定位，封禁/解封仍需在态势感知平台走双人复核与审计，指挥中心不直接下发阻断指令。',
+    full: true
+  },
+  rack: {
+    tag: 'NETWORK RACK',
+    title: '网络机柜 · 端口状态',
+    rows: [
+      ['机柜编号', 'RC-08（测试机柜）'],
+      ['上联端口 Gi1/0/24', '1000M 全双工 正常', 'ok'],
+      ['告警端口 Gi1/0/6', 'CRC 错误 128 · 已置红', 'bad'],
+      ['光模块', '单模 1310nm · 收 -6.2 dBm', 'ok'],
+      ['今日丢包', '0.02%', 'ok'],
+      ['处置建议', '更换跳线后观察 30 分钟']
+    ],
+    note: '点击机柜时场景内的告警端口会红色闪烁 4.5 秒，便于在 3D 中快速定位；真实环境请以网管告警为准。'
+  },
+  duty: {
+    tag: 'DUTY ROSTER · 8 人三组',
+    title: '主控台 · 在岗值班与岗位职责',
+    rows: [
+      ['在岗值班（3 人）', '张工 · 值班长/数字电视（高工）｜赵工 · 网络安全（高工）｜刘工 · 网络配置/规划架构（中工）', 'ok'],
+      ['值班表（8 人）', '高级工程师 3 人：张工、李工、赵工；中级工程师 5 人：王工、陈工、刘工、孙工、周工'],
+      ['数字电视管理与运维（3 人）', '张工（高工·值班长）、李工（高工）、王工（中工）｜信源调度、播出链路、画面质量'],
+      ['网络安全管理与处置（2 人）', '赵工（高工）、陈工（中工）｜攻击监测、封禁处置、事件上报'],
+      ['网络配置与操作（3 人）', '刘工、孙工、周工（均为中工）｜其中刘工负责网络规划与架构设计'],
+      ['巡检安排', '每 2 小时一次（整点）：机柜 / UPS / 大屏信源 / 空调，双人签字；夜间加密一次', 'warn'],
+      ['交接班', '08:30 / 20:30｜交接值班记录、未闭环告警、钥匙与对讲'],
+      ['上报链路', '值班长 → 中心主任 → 上级单位，重大故障 5 分钟内首报']
+    ],
+    note: '主控台席位牌是唯一入口：点开即可查看在岗 3 人、8 人排班、三组职责与巡检要求。'
+  },
+  door: {
+    tag: 'AUTO SENSOR DOOR',
+    title: '机房门 · 健身房',
+    rows: [
+      ['门后区域', '商用健身旗舰店 · 自由力量 / 固定器械 / 有氧 / MMA / 电竞'],
+      ['开门方式', '门顶感应器 · 靠近自动双开（已取消门禁）'],
+      ['通行规则', '走到门前 2.7m 内自动开门，门扇向内双开'],
+      ['防夹保护', '门区有人时保持开启，离开后延时关闭'],
+      ['应急', '断电可手动推开，门内侧有应急解锁']
+    ],
+    note: '门顶感应器检测到人员靠近即开门，门扇打开时状态灯由绿转亮；也可点右下角「下班了」直接进店。'
+  },
+  riotgear: {
+    tag: 'RIOT GEAR',
+    title: '防暴器材架 · 应急处置',
+    rows: [
+      ['防暴盾牌', '2 面 · 透明 PC 板 · 双握把', 'ok'],
+      ['防暴叉', '1 支 · 不锈钢杆 · U 形叉头', 'ok'],
+      ['警棍', '3 支 · 伸缩式 · 带卡箍', 'ok'],
+      ['防弹衣', '2 件 · IIIA 级 · 前后插板', 'ok'],
+      ['防暴头盔', '2 顶 · 面罩可翻起', 'ok'],
+      ['检查周期', '每月 1 日清点 · 值班长签字'],
+      ['取用规则', '突发处置时取用，事后 24h 内归位登记']
+    ],
+    note: '器材靠左墙后侧整齐挂放，取用通道保持畅通；缺失或损坏须当班上报。'
+  },
+  gymgear: {
+    tag: 'GYM EQUIPMENT',
+    title: '健身房 · 器材与电竞区',
+    rows: [
+      ['区域划分', '自由力量 / 固定器械 / 有氧 / 功能训练 / 电竞'],
+      ['电竞位', '3 台高背椅 + 主机 + 2K 240Hz 屏'],
+      ['角色', '爆炸头 + 头戴耳机 · 哑铃飞鸟'],
+      ['状态色', '正常 / 使用中 / 维护中 / 空闲'],
+      ['提示', '点击具体器材查看目标肌群与配重范围']
+    ],
+    note: '健身房以器材为主，电竞区仅占右侧墙边一条；点击器材或角色可查看详情。'
   }
 };
 
 const $ = id => document.getElementById(id);
 
-export function initUI({ onView, onAlarm }) {
+/* 指标 → DOM 的唯一写入点：处置台只改 store，不再直接改这些卡片 */
+function render (m) {
+  const txt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  const html = (id, v) => { const el = $(id); if (el) el.innerHTML = v; };
+  const cls = (id, v) => { const el = $(id); if (el) el.className = v; };
+  const width = (id, v) => { const el = $(id); if (el) el.style.width = v; };
+
+  html('m-src', m.src + '<small>/' + m.srcTotal + '</small>');
+  html('m-out', m.out + '<small>/' + m.outTotal + '</small>');
+  txt('m-atk', m.attacks.toLocaleString());
+  txt('m-blk', m.blocked);
+  txt('m-pend', m.pending);
+  html('m-traf', m.traffic.toFixed(1) + '<small>Gbps</small>');
+  txt('m-loss', m.loss.toFixed(2) + '%');
+
+  const pend = $('m-pend');
+  if (pend) pend.style.color = m.pending > 2 ? '#ff5a5a' : '';
+
+  width('bar-bc', m.health + '%');
+  const bc = $('bar-bc');
+  if (bc) {
+    bc.style.background = m.alarm
+      ? 'linear-gradient(90deg,#a33,#ff5a5a)'
+      : 'linear-gradient(90deg,#2a9fd6,#3fd0ff)';
+  }
+  width('bar-net', Math.round(m.traffic) + '%');
+  cls('dot-bc', m.alarm ? 'dot bad' : 'dot');
+  cls('dot-sec', m.pending > 0 ? 'dot warn' : 'dot');
+}
+
+export function initUI({ onView, onAlarm, onGym }) {
+  subscribe(render);
+
   // 时钟
   const tick = () => {
     const d = new Date();
@@ -97,17 +205,27 @@ export function initUI({ onView, onAlarm }) {
   };
   tick(); setInterval(tick, 1000);
 
-  // 视角
+  // 视角（第 7 个按钮「下班了」直接进入健身房）
+  const activate = i => {
+    document.querySelectorAll('#views .btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.view === String(i));
+    });
+  };
   document.querySelectorAll('#views .btn').forEach(b => {
+    // 统一由 activate() 同步高亮，避免键盘与鼠标两条路径状态分叉
     b.addEventListener('click', () => {
-      onView(Number(b.dataset.view));
-      document.querySelectorAll('#views .btn').forEach(x => x.classList.remove('active'));
-      b.classList.add('active');
+      if (b.dataset.view === 'gym') {
+        onGym?.();
+        return;
+      }
+      const i = Number(b.dataset.view);
+      onView(i);
+      activate(i);
     });
   });
 
   // 告警演练
-  $('alarm-btn').addEventListener('click', () => setAlarm(!D.alarm, onAlarm));
+  $('alarm-btn').addEventListener('click', () => setAlarm(!metrics.alarm, onAlarm));
   $('reset-btn').addEventListener('click', () => {
     setAlarm(false, onAlarm);
     document.querySelectorAll('#views .btn').forEach(x => x.classList.remove('active'));
@@ -115,7 +233,11 @@ export function initUI({ onView, onAlarm }) {
   $('panel-close').addEventListener('click', closePanel);
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') closePanel();
-    if (['1', '2', '3', '4', '5', '6'].includes(e.key)) onView(Number(e.key) - 1);
+    if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+      const i = Number(e.key) - 1;
+      onView(i);
+      activate(i);
+    }
   });
 
   setInterval(simulate, 2600);
@@ -123,53 +245,55 @@ export function initUI({ onView, onAlarm }) {
 }
 
 function simulate() {
-  if (D.alarm) return;
-  D.attacks += Math.floor(Math.random() * 7);
-  D.blocked += Math.random() > 0.6 ? 1 : 0;
-  D.traffic = Math.max(30, Math.min(72, D.traffic + (Math.random() - 0.5) * 1.6));
-  D.loss = Math.max(0, Math.min(0.09, D.loss + (Math.random() - 0.5) * 0.01));
-
-  $('m-atk').textContent = D.attacks.toLocaleString();
-  $('m-blk').textContent = D.blocked;
-  $('m-traf').innerHTML = D.traffic.toFixed(1) + '<small>Gbps</small>';
-  $('m-loss').textContent = D.loss.toFixed(2) + '%';
-  $('bar-net').style.width = (D.traffic / 100 * 100).toFixed(0) + '%';
+  if (metrics.alarm) return;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  update({
+    attacks: metrics.attacks + Math.floor(Math.random() * 7),
+    blocked: metrics.blocked + (Math.random() > 0.6 ? 1 : 0),
+    traffic: clamp(metrics.traffic + (Math.random() - 0.5) * 1.6, 30, 72),
+    loss: clamp(metrics.loss + (Math.random() - 0.5) * 0.01, 0, 0.09)
+  });
 }
 
+let pendingBeforeAlarm = 2;
+
 export function setAlarm(on, cb) {
-  D.alarm = on;
+  if (on) {
+    pendingBeforeAlarm = metrics.pending;
+    update({ alarm: true, src: 11, out: 382, pending: 4, health: 72 });
+  } else {
+    update({ alarm: false, src: metrics.srcTotal, out: metrics.outTotal, pending: pendingBeforeAlarm, health: 96 });
+  }
+
   const btn = $('alarm-btn');
   btn.classList.toggle('active', on);
   btn.textContent = on ? '告警中' : '告警演练';
-  $('banner').classList.toggle('show', on);
-
-  const dotBc = $('dot-bc');
-  dotBc.className = 'dot' + (on ? ' bad' : '');
-  $('m-src').innerHTML = on ? '11<small>/12</small>' : '12<small>/12</small>';
-  $('m-out').innerHTML = on ? '382<small>/386</small>' : '386<small>/386</small>';
-  $('bar-bc').style.width = on ? '72%' : '96%';
-  $('bar-bc').style.background = on
-    ? 'linear-gradient(90deg,#a33,#ff5a5a)'
-    : 'linear-gradient(90deg,#2a9fd6,#3fd0ff)';
+  // 标记告警横幅占用，避免操作提示的定时器把它隐藏
+  const bn = $('banner');
+  bn.classList.toggle('show', on);
   if (on) {
-    $('m-pend').textContent = '4';
-    $('m-pend').style.color = '#ff5a5a';
+    bn.dataset.alarm = '1';
+    // 演练横幅不依赖外部回调，避免主场景未注入时空白
+    if (!bn.innerHTML.trim()) {
+      bn.innerHTML = '<b style="color:#ff5a5a">告警演练中</b> · 安全播出分区已接管，请按预案处置';
+    }
   } else {
-    $('m-pend').textContent = '2';
-    $('m-pend').style.color = '';
+    delete bn.dataset.alarm;
+    bn.innerHTML = '';
   }
   cb?.(on);
 }
 
-export function openPanel(key) {
-  const p = PANELS[key] || PANELS.wall;
+export function openPanel(key, info) {
+  // 动态对象（器材 / 门禁）直接带 rows，静态分区仍走 PANELS 注册表
+  const p = (info && info.rows ? info : PANELS[key]) || PANELS.wall;
   $('panel-title').textContent = p.title;
   const rows = p.rows.map(r => {
     const cls = r[2] ? ` class="${r[2]}"` : '';
     return `<div class="p-row"><span>${r[0]}</span><b${cls}>${r[1]}</b></div>`;
   }).join('');
   $('panel-body').innerHTML = `
-    <div class="p-tag">${p.tag}</div>
+    <div class="p-tag">${p.tag || ''}</div>
     ${rows}
     <div class="p-note">${p.note}</div>
     <div class="p-actions">
@@ -184,10 +308,11 @@ export function openPanel(key) {
     });
   });
   $('panel').classList.add('open');
+  $('panel').classList.toggle('full', !!p.full);
 }
 
 export function closePanel() {
-  $('panel').classList.remove('open');
+  $('panel').classList.remove('open', 'full');
 }
 
 export function showTip(text, x, y) {

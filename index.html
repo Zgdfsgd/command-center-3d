@@ -41,8 +41,6 @@
     transition:.2s;backdrop-filter:blur(8px)}
   .btn:hover{border-color:rgba(63,208,255,.55);color:#fff;box-shadow:0 0 12px rgba(63,208,255,.18)}
   .btn.active{border-color:var(--amber);color:var(--amber);background:rgba(60,36,10,.55)}
-  .btn.guide{border-color:rgba(255,181,71,.42);color:#ffd79a;background:rgba(52,34,10,.5)}
-  .btn.guide:hover{border-color:var(--amber);box-shadow:0 0 12px rgba(255,181,71,.25)}
 
   /* ---------- 左侧指标 ---------- */
   #cards{position:fixed;left:20px;top:84px;width:242px;display:flex;flex-direction:column;gap:10px;z-index:9}
@@ -61,7 +59,8 @@
     box-shadow:0 0 10px rgba(63,208,255,.5);transition:width .8s ease}
 
   /* ---------- 视角按钮 ---------- */
-  #views{position:fixed;right:20px;bottom:22px;display:flex;gap:8px;z-index:9}
+  #views{position:fixed;right:20px;bottom:22px;display:flex;gap:8px;z-index:9;
+    flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 40px)}
   #views .btn{min-width:74px}
   #hint{position:fixed;left:20px;bottom:22px;font-size:11px;color:#6d8397;letter-spacing:.6px;z-index:9}
   #hint span{color:#9db6ca}
@@ -72,6 +71,11 @@
     border-radius:8px;backdrop-filter:blur(12px);z-index:11;overflow:auto;
     transform:translateX(360px);opacity:0;transition:.32s cubic-bezier(.2,.8,.2,1)}
   #panel.open{transform:none;opacity:1}
+  /* 全屏态势面板：点右墙大屏时铺开，内容两列 */
+  #panel.full{left:60px;right:60px;top:88px;bottom:70px;width:auto;max-height:none;
+    border-left-width:1px;border-left-color:var(--line)}
+  #panel.full .pb{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 30px;align-content:start}
+  #panel.full .p-tag,#panel.full .p-note,#panel.full .p-actions{grid-column:1/-1}
   #panel .ph{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;
     padding:14px 16px;background:rgba(10,16,23,.96);border-bottom:1px solid var(--line)}
   #panel .ph h2{font-size:14px;font-weight:600;letter-spacing:.5px}
@@ -112,7 +116,11 @@
 
   ::-webkit-scrollbar{width:6px}
   ::-webkit-scrollbar-thumb{background:rgba(120,160,190,.35);border-radius:3px}
-  @media (max-width:1100px){#cards{display:none}}
+  @media (max-width:1100px){
+    #cards{display:none}
+    #panel.full{left:16px;right:16px;top:76px;bottom:56px}
+    #panel.full .pb{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
@@ -161,8 +169,9 @@
   <button class="btn" data-view="1">2 大屏</button>
   <button class="btn" data-view="2">3 业务屏</button>
   <button class="btn" data-view="3">4 主控台</button>
-  <button class="btn" data-view="4">5 俯视</button>
-  <button class="btn guide" data-view="5">6 回望玻璃门</button>
+  <button class="btn" data-view="4">5 左后视点</button>
+  <button class="btn" data-view="5">6 回望玻璃门</button>
+  <button class="btn" data-view="gym">下班了</button>
 </div>
 
 <div id="hint">拖拽旋转 · 滚轮缩放 · 右键平移 · <span>点击地面进入第一人称行走（F 切换）</span></div>
@@ -185,6 +194,34 @@
   </div>
 </div>
 
-<script type="module" src="./js/main.js"></script>
+<script type="module">
+  /* 启动统一兜底：模块加载失败 / WebGL2 不可用 / 引擎初始化抛错 / 显卡上下文丢失，一律切 2D 看板 */
+  const showFallback = err => {
+    console.error('[command-center] 3D 初始化失败，已降级 2D 看板', err);
+    const app = document.getElementById('app');
+    if (app) app.style.display = 'none';
+    const hint = document.getElementById('hint');
+    if (hint) hint.style.display = 'none';
+    const fb = document.getElementById('fallback');
+    if (fb) fb.style.display = 'flex';
+    // 标题固定，只按真实原因替换说明文字，避免把代码报错误报成“显卡不支持”
+    const p = fb && fb.querySelector('p');
+    if (p) {
+      const msg = String((err && (err.message || err.reason || err)) || '');
+      if (/WebGL2 unavailable/i.test(msg)) {
+        p.textContent = '当前终端未启用 WebGL2 或显卡驱动被禁用。请在浏览器设置中开启硬件加速后重试；下方 2D 看板保留关键指标。';
+      } else if (/Failed to fetch dynamically imported module|Importing a module script failed|Loading module/i.test(msg)) {
+        p.textContent = '3D 模块文件加载失败（可能是缓存或部署文件缺失）。请强制刷新（Ctrl+F5）后重试；下方 2D 看板保留关键指标。';
+      } else if (/webglcontextlost/i.test(msg)) {
+        p.textContent = '显卡上下文已丢失（驱动重置或显存不足）。请刷新页面恢复 3D；下方 2D 看板保留关键指标。';
+      } else {
+        p.textContent = '3D 场景初始化出现异常：' + (msg.slice(0, 120) || '未知错误') + '。请打开控制台查看详细信息；下方 2D 看板保留关键指标。';
+      }
+    }
+  };
+  /* 不使用顶层 await：旧版 Safari / 部分 WebView 会直接语法错误，连兜底都执行不到 */
+  window.addEventListener('cc:contextlost', e => showFallback(e.detail));
+  import('./js/main.js').catch(showFallback);
+</script>
 </body>
 </html>

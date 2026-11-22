@@ -2,6 +2,8 @@
  * 与页面解耦，独立注入 DOM 与样式，standalone / TvT 插件共用
  */
 
+import { metrics, subscribe, update } from './store.js';
+
 const CSS = `
 .sim-fab{position:fixed;right:20px;bottom:74px;z-index:20;height:34px;padding:0 14px;border-radius:18px;
   border:1px solid rgba(63,208,255,.45);background:rgba(10,22,32,.88);color:#bfe8ff;font-size:12px;
@@ -158,10 +160,14 @@ export function initSim() {
   let bannerTimer = 0;
   function bannerMsg(html, ms = 4600) {
     if (!banner) return;
+    // 告警横幅正在展示时不覆盖它
+    if (banner.dataset.alarm) return;
     banner.innerHTML = html;
     banner.classList.add('show');
     clearTimeout(bannerTimer);
-    bannerTimer = setTimeout(() => banner.classList.remove('show'), ms);
+    bannerTimer = setTimeout(() => {
+      if (!banner.dataset.alarm) banner.classList.remove('show');
+    }, ms);
   }
 
   function log(text) {
@@ -205,6 +211,7 @@ export function initSim() {
   function switchSource(toStandby) {
     if (switching) return;
     switching = true;
+    emit('switch');
     let n = 3;
     const target = toStandby ? '备用' : '主用';
     const run = () => {
@@ -224,8 +231,7 @@ export function initSim() {
       toast(`已切换至${target}信源，EPG 与码流校验通过`);
       emit('switch');
       bannerMsg(`<b>操作完成</b> · 数字电视平台已切换至${target}信源，输出码流正常，请值班员复核`);
-      const mSrc = document.getElementById('m-src');
-      if (mSrc) mSrc.innerHTML = toStandby ? '12<small>/12</small>' : '12<small>/12</small>';
+      update({ standby: toStandby });
     };
     log(`发起信源切换：${toStandby ? '主用 → 备用' : '备用 → 主用'}，等待人工确认`);
     setTimeout(run, 500);
@@ -241,19 +247,28 @@ export function initSim() {
     { id: 'SEC-2411-03', time: '10:51', level: '低', title: '播出网：非法组播源探测（已限速）', state: 2 }
   ];
   let pending = events.filter(e => e.state < 2).length;
-  let blocked = 37;
 
-  function refreshOps() {
+  function paintPending() {
     const el = $('sim-pend');
     if (el) {
       el.textContent = pending;
       el.className = pending > 0 ? 'bad' : 'ok';
     }
-    const blk = document.getElementById('m-blk');
-    if (blk) blk.textContent = blocked;
-    const dot = document.getElementById('dot-sec');
-    if (dot) dot.className = pending > 0 ? 'dot warn' : 'dot';
   }
+
+  function refreshOps() {
+    /* 待处置数写回 store，由 ui.js 统一渲染 HUD 卡片 */
+    update({ pending });
+    paintPending();
+  }
+
+  /* 告警演练会临时改写待处置数，这里跟随 store 回写，避免两处计数打架 */
+  subscribe(m => {
+    if (m.pending !== pending) {
+      pending = m.pending;
+      paintPending();
+    }
+  });
 
   function renderEvents() {
     const box = $('sim-events');
@@ -285,7 +300,7 @@ export function initSim() {
           emit('ack');
         } else {
           ev.state = 2;
-          blocked += 1;
+          update({ blocked: metrics.blocked + 1 });
           log(`完成封禁处置 ${ev.id}，策略已下发至边界防火墙`);
           toast('封禁策略已下发，事件闭环');
           emit('fix');
@@ -322,6 +337,7 @@ export function initSim() {
     btn.disabled = true;
     btn.textContent = '对讲呼叫中…';
     log(`对讲呼叫 ${team}`);
+    emit('radio');
     setTimeout(() => {
       btn.textContent = '对讲已接通 · 松开结束';
       toast(`${team} 应答：收到，正在前往现场`);
@@ -330,6 +346,7 @@ export function initSim() {
     setTimeout(() => {
       btn.disabled = false;
       btn.textContent = '对讲呼叫值班组';
+      emit('hangup');
     }, 4200);
   });
 
@@ -373,6 +390,7 @@ export function initSim() {
     setPhone('ringing');
     log('调度电话来电：省公司安全播出调度中心');
     toast('来电振铃，请接听');
+    emit('ring');
   });
 
   $('sim-answer').addEventListener('click', () => {
@@ -395,6 +413,7 @@ export function initSim() {
     log(`结束通话，通话时长 ${pad(Math.floor(callSeconds / 60))}:${pad(callSeconds % 60)}`);
     toast('通话已结束，记录已归档');
     setPhone('idle');
+    emit('hangup');
   });
 
   /* 首次进入 25 秒后模拟一次来电，便于演示 */
@@ -403,6 +422,7 @@ export function initSim() {
       setPhone('ringing');
       log('调度电话来电：省公司安全播出调度中心');
       toast('演示来电 · 可在「电话」页接听');
+      emit('ring');
     }
   }, 25000);
 
