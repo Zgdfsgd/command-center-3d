@@ -9,16 +9,20 @@ import { initSim } from './sim.js';
 /* ---------- WebGL2 探测 ----------
    three r163+ 已移除 WebGL1，这里只认 webgl2，与引擎实际要求一致。
    getContext 本身可能抛异常（沙箱 iframe / 上下文耗尽），同样视为不可用。
-   任何失败都向上抛出，由 index.html 的 loader 统一降级 2D。 */
+   任何失败都向上抛出，由 index.html 的 loader 统一降级 2D。
+   注意：探测用的上下文**不能**在这里销毁，否则部分浏览器（尤其 Safari / 集显）
+   会把随后的正式上下文一并判为丢失，表现为画布不创建、整页黑屏。 */
 const probe = document.createElement('canvas');
 let probeGL = null;
 try { probeGL = probe.getContext('webgl2'); } catch (e) { probeGL = null; }
 if (!probeGL) throw new Error('WebGL2 unavailable');
-// 探测用上下文立即释放，避免占用浏览器有限的 WebGL 上下文名额
-probeGL.getExtension('WEBGL_lose_context')?.loseContext();
+probe.width = probe.height = 1;
 
 const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+/* 上下文创建失败（沙箱 iframe / 显存不足 / 探测后名额被占）必须明确抛错，
+   否则 canvas 静默不渲染，页面一片黑且没有任何提示 */
+if (!renderer.getContext()) throw new Error('WebGL2 unavailable: renderer context creation failed');
 renderer.setSize(window.innerWidth, window.innerHeight);
 /* 低配设备降载：4 核以下或内存 ≤4G，像素比压到 1.25 */
 const lowSpec = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;
@@ -554,6 +558,7 @@ function animatePeople(t, dt) {
 const clock = new THREE.Clock();
 let t = 0;
 let rafId = 0;
+let frameChecked = false;
 function animate() {
   rafId = requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -593,6 +598,13 @@ function animate() {
   }
 
   renderer.render(scene, camera);
+  // 自我巡检：首帧渲染完仍拿不到绘图上下文（驱动异常 / 名额耗尽）就主动降级，避免黑屏无提示
+  if (!frameChecked) {
+    frameChecked = true;
+    if (!renderer.getContext()) throw new Error('WebGL2 unavailable: context lost before first frame');
+    // 首帧成功，告知启动脚本 3D 已正常起来
+    window.dispatchEvent(new CustomEvent('cc:ready'));
+  }
 }
 
 /* 显卡重置 / 驱动崩溃：暂停渲染并交给启动兜底脚本切 2D 看板，避免黑屏无提示 */

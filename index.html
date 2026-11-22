@@ -220,8 +220,18 @@
     }
   };
   /* 不使用顶层 await：旧版 Safari / 部分 WebView 会直接语法错误，连兜底都执行不到 */
-  window.addEventListener('cc:contextlost', e => showFallback(e.detail));
-  import('./js/main.js').catch(showFallback);
+  let failed = false;
+  const fail = err => { if (failed) return; failed = true; showFallback(err); };
+  /* 超时看门狗：模块卡住或 canvas 迟迟未挂载时也必须给出提示，不能一直黑屏 */
+  const watchdog = setTimeout(() => {
+    if (document.querySelector('#app canvas')) return;
+    fail(new Error('3D 场景超时未就绪（模块加载缓慢或被环境拦截）'));
+  }, 15000);
+  window.addEventListener('cc:ready', () => clearTimeout(watchdog));
+  window.addEventListener('cc:contextlost', e => fail(e.detail));
+  /* 兜底脚本自身异常（例如 showFallback 抛错）也要能切到 2D */
+  window.addEventListener('error', e => fail(e.error || new Error(e.message)), true);
+  import('./js/main.js').catch(fail);
 </script>
 </body>
 </html>
